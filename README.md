@@ -1,4 +1,4 @@
-# Nexmo In-App Messaging Conversation Gateway Demo
+# Nexmo In-App Messaging Gateway Demo
 
 An API server to demo how to use Nexmo In-App Messaging on your server-side applications. For more info visit our [developer preview site.](https://ea.developer.nexmo.com/conversation/overview)
 
