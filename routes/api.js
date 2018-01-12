@@ -1,34 +1,31 @@
 var express = require('express');
 var router = express.Router();
 var Nexmo = require('nexmo');
+var config = require('../config');
 
-var privateKey = './private.key';
-var appId = process.env.APP_ID;
-var apiKey = process.env.APP_ID;
-var apiSecret = process.env.APP_ID;
-var nexmo = new Nexmo({apiKey: apiKey, apiSecret: apiSecret, applicationId: appId, privateKey: privateKey});
+var nexmo = new Nexmo({apiKey: config.API_KEY, apiSecret: config.API_SECRET, applicationId: config.APP_ID, privateKey: config.PRIVATE_KEY});
 
 const adminAcl = {
-          "paths": {
-            "/v1/sessions/**": {},
-            "/v1/users/**": {},
-            "/v1/conversations/**": {}
-          }
-        }
+  "paths": {
+    "/v1/sessions/**": {},
+    "/v1/users/**": {},
+    "/v1/conversations/**": {}
+  }
+}
 
 const nonAdminAcl = {
-          "paths": {
-            "/v1/sessions/**": {
-              "methods": ["GET"]
-            },
-            "/v1/users/*": {
-              "methods": ["GET"]
-            },
-            "/v1/conversations/*": {
-              "methods": ["GET", "POST", "PUT"]
-            }
-          }
-        }
+  "paths": {
+    "/v1/sessions/**": {
+      "methods": ["GET"]
+    },
+    "/v1/users/*": {
+      "methods": ["GET"]
+    },
+    "/v1/conversations/*": {
+      "methods": ["GET", "POST", "PUT"]
+    }
+  }
+}
 
 router.post('/users', function(req, res, next) {
   var username = req.body.username
@@ -40,17 +37,17 @@ router.post('/users', function(req, res, next) {
     if (error) {
       res.json(error)
     } else {
-      res.json(
-        {
-          user: response,
-          user_jwt: Nexmo.generateJwt(privateKey, {
-            application_id: appId,
-            sub: username,
-            exp: new Date().getTime() + 86400,
-            acl: admin ? adminAcl : nonAdminAcl
-          })
-        }
-      )
+      res.json({
+        user: response,
+        user_jwt: Nexmo.generateJwt(config.PRIVATE_KEY, {
+          application_id: config.APP_ID,
+          sub: username,
+          exp: new Date().getTime() + 86400,
+          acl: admin
+            ? adminAcl
+            : nonAdminAcl
+        })
+      })
     }
   })
 });
@@ -99,6 +96,16 @@ router.get('/users', function(req, res) {
   });
 });
 
+router.get('/conversations', function(req, res) {
+  nexmo.conversations.get({}, (error, response) => {
+    if (error) {
+      res.json(error)
+    } else {
+      res.json(response)
+    }
+  });
+});
+
 router.get('/jwt/:user', function(req, res, next) {
   var admin = req.query.admin
   nexmo.users.get({}, (error, response) => {
@@ -110,11 +117,13 @@ router.get('/jwt/:user', function(req, res, next) {
         res.json({error: "User not found"})
       } else {
         res.json({
-          user_jwt: Nexmo.generateJwt(privateKey, {
-            application_id: appId,
+          user_jwt: Nexmo.generateJwt(config.PRIVATE_KEY, {
+            application_id: config.APP_ID,
             sub: req.params.user,
             exp: new Date().getTime() + 86400,
-            acl: admin ? adminAcl : nonAdminAcl
+            acl: admin
+              ? adminAcl
+              : nonAdminAcl
           })
         });
       }
@@ -122,7 +131,9 @@ router.get('/jwt/:user', function(req, res, next) {
   });
 });
 
-
+router.get('/', function(req, res, next) {
+  res.render('index', {});
+});
 
 
 module.exports = router;

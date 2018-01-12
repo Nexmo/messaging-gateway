@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <style>
+    #login,
+    #user,
+    #messages {
+      width: 80% height: 300px
+    }
+
+    #messages {
+      display: none
+    }
+
+    #conversations {
+      display: none
+    }
+  </style>
+  <script src="/javascripts/conversationClient.js"></script>
+</head>
+
+<body>
+
+  <form id="login">
+    <h1>Users</h1>
+    <div id="usersList"></div>
+    <h1>Login</h1>
+    <input type="text" name="username" value="">
+    <input type="submit" value="Login" />
+  </form>
+  <form id="user">
+    <h1>Create User</h1>
+    <input type="text" name="username" value="">
+    <input type="submit" value="Create User" />
+  </form>
+
+  <section id="messages">
+    <button id="leave">Leave Conversation</button>
+    <div>
+      <audio id="audio">
+        <source>
+      </audio>
+      <button id="enable">Enable Audio</button>
+      <button id="disable">Disable Audio</button>
+    </div>
+    <div>
+      <form id="invite">
+        <input type="text" name="username" value="">
+        <input type="submit" value="Invite User" />
+      </form>
+    </div>
+    <div>
+      <form id="kick">
+        <input type="text" name="username" value="">
+        <input type="submit" value="Kick User" />
+      </form>
+    </div>
+    <h1>Members</h1>
+
+    <div id="membersList"></div>
+    <h1>Messages</h1>
+
+    <div id="messageFeed"></div>
+
+    <textarea id="messageTextarea"></textarea>
+    <br>
+    <button id="send">Send</button>
+  </section>
+
+  <section id="conversations">
+    <form id="conversation">
+      <h1>Conversations</h1>
+      <input type="text" name="conversation" value="">
+      <input type="submit" value="Create Conversation" />
+    </form>
+  </section>
+
+  <script>
+    const GATEWAY_URL = "http://localhost:3000";
+    class ChatApp {
+      constructor() {
+        this.messageTextarea = document.getElementById('messageTextarea')
+        this.messageFeed = document.getElementById('messageFeed')
+        this.sendButton = document.getElementById('send')
+        this.loginForm = document.getElementById('login')
+        this.userForm = document.getElementById('user')
+        this.inviteForm = document.getElementById('invite')
+        this.kickForm = document.getElementById('kick')
+        this.conversationForm = document.getElementById('conversation')
+        this.conversationList = document.getElementById('conversations')
+        this.userList = document.getElementById('usersList')
+        this.membersList = document.getElementById('membersList')
+        this.leaveButton = document.getElementById('leave')
+        this.audio = document.getElementById('audio')
+        this.enableButton = document.getElementById('enable')
+        this.disableButton = document.getElementById('disable')
+        this.setupUserEvents()
+        this.getUsers().then(users => this.updateUsersList(users)).catch(this.errorLogger)
+      }
+
+      errorLogger(error) {
+        console.log(error)
+      }
+
+      eventLogger(event) {
+        return () => {
+          console.log("'%s' event was sent", event)
+        }
+      }
+
+      memberEventHandler(type) {
+        return (member, event) => {
+          const date = new Date(Date.parse(event.timestamp))
+          console.log(`*** ${member.user.name} ${type} the conversation`)
+          const text = `${member.user.name} @ ${date}: <b>${type} the conversation</b><br>`
+          this.messageFeed.innerHTML = text + this.messageFeed.innerHTML
+        }
+      }
+
+      authenticate(username) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("GET", GATEWAY_URL + "/jwt/" + username + "?admin=true");
+          xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+          xhr.onerror = () => reject(xhr.statusText);
+          xhr.send();
+        });
+      }
+
+      showConversationHistory(conversation) {
+        conversation.getEvents().then((events) => {
+          var eventsHistory = ""
+          for (var i = Object.keys(events).length; i > 0; i--) {
+            const date = new Date(Date.parse(events[Object.keys(events)[i - 1]].timestamp))
+            if (conversation.members[events[Object.keys(events)[i - 1]].from]) {
+              switch (events[Object.keys(events)[i - 1]].type) {
+                case 'text':
+                  eventsHistory += `${conversation.members[events[Object.keys(events)[i - 1]].from].user.name} @ ${date}: <b>${events[Object.keys(events)[i - 1]].body.text}</b><br>`
+                  break;
+
+                case 'member:media':
+                  eventsHistory += `${conversation.members[events[Object.keys(events)[i - 1]].from].user.name} @ ${date}: <b>${events[Object.keys(events)[i - 1]].body.audio ? "enabled" : "disabled"} audio</b><br>`
+                  break;
+
+                case 'member:joined':
+                  eventsHistory += `${conversation.members[events[Object.keys(events)[i - 1]].from].user.name} @ ${date}: <b>joined the conversation</b><br>`
+                  break;
+                case 'member:left':
+                  eventsHistory += `${conversation.members[events[Object.keys(events)[i - 1]].from].user.name} @ ${date}: <b>left the conversation</b><br>`
+                  break;
+                case 'member:invited':
+                  eventsHistory += `${conversation.members[events[Object.keys(events)[i - 1]].from].user.name} @ ${date}: <b>invited to the conversation</b><br>`
+                  break;
+
+                default:
+                  eventsHistory += `${conversation.members[events[Object.keys(events)[i - 1]].from].user.name} @ ${date}: <b>unknown event</b><br>`
+
+              }
+            }
+          }
+
+          this.messageFeed.innerHTML = eventsHistory + this.messageFeed.innerHTML
+        })
+      }
+
+      setupConversationEvents(conversation) {
+        this.conversation = conversation
+        this.conversationList.style.display = 'none'
+        document.getElementById("messages").style.display = "block"
+        console.log('*** Conversation Retrieved', conversation)
+        console.log('*** Conversation Member', conversation.me)
+
+        // Bind to events on the conversation
+        conversation.on('text', (sender, message) => {
+          console.log('*** Message received', sender, message)
+          const date = new Date(Date.parse(message.timestamp))
+          const text = `${sender.name} @ ${date}: <b>${message.body.text}</b><br>`
+          this.messageFeed.innerHTML = text + this.messageFeed.innerHTML
+
+          if (sender.name !== this.conversation.me.name) {
+            message.seen().then(this.eventLogger('text:seen')).catch(this.errorLogger)
+          }
+        })
+
+        conversation.on("member:joined", this.memberEventHandler('joined'))
+        conversation.on("member:left", this.memberEventHandler('left'))
+        conversation.on("member:media", (member, event) => {
+          console.log(`*** Member changed media state`, member, event)
+          const text = `${member.user.name} <b>${event.body.audio ? 'enabled' : 'disabled'} audio in the conversation</b><br>`
+          this.messageFeed.innerHTML = text + this.messageFeed.innerHTML
+        })
+
+        this.showConversationHistory(conversation)
+        this.updateMembersList(conversation.members)
+
+        conversation.on("text:seen", (data, text) => console.log(`${data.name} saw text: ${text.body.text}`))
+        conversation.on("text:typing:off", data => console.log(`${data.name} stopped typing...`))
+        conversation.on("text:typing:on", data => console.log(`${data.name} started typing...`))
+      }
+
+      updateMembersList(members) {
+        let membersElement = document.createElement("ul")
+        for (let id in members) {
+          let memberElement = document.createElement("li")
+          memberElement.textContent = members[id].user.name
+          membersElement.appendChild(memberElement)
+        }
+
+        this.membersList.appendChild(membersElement)
+      }
+
+      updateUsersList(users) {
+        let usersElement = document.createElement("ul")
+        for (let id in users) {
+          let userElement = document.createElement("li")
+          userElement.textContent = users[id].name
+          usersElement.appendChild(userElement)
+        }
+
+        this.userList.appendChild(usersElement)
+      }
+
+
+      updateConversationsList(conversations) {
+        let conversationsElement = document.createElement("ul")
+        for (let id in conversations) {
+          let conversationElement = document.createElement("li")
+          conversationElement.textContent = conversations[id].display_name
+          conversationElement.addEventListener("click", () => this.setupConversationEvents(conversations[id]))
+          conversationsElement.appendChild(conversationElement)
+        }
+
+        if (!conversationsElement.childNodes.length) {
+          conversationsElement.textContent = "You are not a member of any conversations"
+        }
+
+        this.conversationList.appendChild(conversationsElement)
+        this.conversationList.style.display = 'block'
+        this.loginForm.style.display = 'none'
+        this.userForm.style.display = 'none'
+      }
+
+
+      listConversations(userToken) {
+
+        new ConversationClient({
+            debug: false,
+            iceServers: {
+              urls: 'turn:138.68.169.35:3478?transport=tcp',
+              credential: 'bar',
+              username: 'foo2'
+            }
+          })
+          .login(userToken)
+          .then(app => {
+            this.app = app
+            console.log('*** Logged into app', app)
+
+            app.on("member:invited", (member, event) => {
+              //identify the sender.
+              console.log("*** Invitation received:", event);
+
+              //accept an invitation.
+              app.getConversation(event.cid || event.body.cname)
+                .then((conversation) => {
+                  this.conversation = conversation
+                  conversation.join().then(() => {
+                    var conversationDictionary = {}
+                    conversationDictionary[this.conversation.id] = this.conversation
+                    this.updateConversationsList(conversationDictionary)
+                  }).catch(this.errorLogger)
+
+                })
+                .catch(this.errorLogger)
+            })
+            return app.getConversations()
+          })
+          .then((conversations) => {
+            console.log('*** Retrieved conversations', conversations)
+
+            this.updateConversationsList(conversations)
+
+          })
+          .catch(this.errorLogger)
+      }
+
+      createAndJoinUser(username) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("GET", GATEWAY_URL + "/utils/createjoin/" + username + "?admin=true");
+          xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+          xhr.onerror = () => reject(xhr.statusText);
+          xhr.send();
+        });
+      }
+
+      getUsers() {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("GET", GATEWAY_URL + "/users");
+          xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+          xhr.onerror = () => reject(xhr.statusText);
+          xhr.send();
+        });
+      }
+
+      createConversation(conversation) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const params = "displayName=" + conversation;
+
+          xhr.open("POST", GATEWAY_URL + "/conversations", true);
+          xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+          xhr.setRequestHeader("Content-length", params.length);
+
+          xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+          xhr.onerror = () => reject(xhr.statusText);
+          xhr.send(params)
+        });
+      }
+
+      updateUserStatus(conversationId, userId, action) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const params = "conversationId=" + conversationId + "&userId=" + userId + "&action=" + action;
+
+          xhr.open("PUT", GATEWAY_URL + "/conversations", true);
+          xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+          xhr.setRequestHeader("Content-length", params.length);
+
+          xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+          xhr.onerror = () => reject(xhr.statusText);
+          xhr.send(params)
+        });
+      }
+
+      createUser(user) {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const params = "username=" + user + "&admin=true";
+
+          xhr.open("POST", GATEWAY_URL + "/users", true);
+          xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+          xhr.setRequestHeader("Content-length", params.length);
+
+          xhr.onload = () => resolve(JSON.parse(xhr.responseText));
+          xhr.onerror = () => reject(xhr.statusText);
+          xhr.send(params)
+        });
+      }
+
+      setupUserEvents() {
+        this.sendButton.addEventListener('click', () => {
+          this.conversation.sendText(this.messageTextarea.value).then(() => {
+            this.eventLogger('text')()
+            this.messageTextarea.value = ''
+          }).catch(this.errorLogger)
+
+        })
+
+        this.loginForm.addEventListener('submit', (event) => {
+          event.preventDefault()
+
+          this.authenticate(this.loginForm.children.username.value).then((response) => {
+            if (response.user_jwt) {
+              this.listConversations(response.user_jwt);
+            } else {
+              this.createAndJoinUser(this.loginForm.children.username.value).then((response) => {
+                this.listConversations(response.user_jwt)
+              }).catch(this.errorLogger);
+            }
+
+          }).catch(this.errorLogger);
+
+        })
+
+        this.userForm.addEventListener('submit', (event) => {
+          event.preventDefault()
+          this.createUser(this.userForm.children.username.value).then(response => {
+            this.listConversations(response.user_jwt);
+          }).catch(this.errorLogger);
+        })
+
+        this.inviteForm.addEventListener('submit', (event) => {
+          event.preventDefault()
+
+          this.getUsers().then(users => {
+            console.log(users);
+            this.updateUserStatus(this.conversation.id, users.filter(user => user.name === this.inviteForm.children.username.value)[0].id, "invite").then(response => {
+              console.log(response);
+            }).catch(this.errorLogger);
+          }).catch(this.errorLogger);
+        })
+
+        this.kickForm.addEventListener('submit', (event) => {
+          event.preventDefault()
+
+          for (var i = Object.keys(this.conversation.members).length; i > 0; i--) {
+            if (this.conversation.members[Object.keys(this.conversation.members)[i - 1]].user.name === this.kickForm.children.username.value) {
+              this.conversation.members[Object.keys(this.conversation.members)[i - 1]].kick()
+            }
+          }
+
+        })
+
+        this.conversationForm.addEventListener('submit', (event) => {
+          event.preventDefault()
+
+          this.createConversation(this.conversationForm.children.conversation.value).then((conversation) => {
+            this.app.getConversation(conversation.id)
+              .then((conversation) => {
+                this.conversation = conversation
+                conversation.join().then(() => {
+                  var conversationDictionary = {}
+                  conversationDictionary[this.conversation.id] = this.conversation
+                  this.updateConversationsList(conversationDictionary)
+                }).catch(this.errorLogger)
+
+              })
+              .catch(this.errorLogger)
+          }).catch(this.errorLogger)
+
+        })
+
+        this.messageTextarea.addEventListener('focus', () => {
+          this.conversation.startTyping().then(this.eventLogger('text:typing:on')).catch(this.errorLogger)
+        });
+        this.messageTextarea.addEventListener('blur', () => {
+          this.conversation.stopTyping().then(this.eventLogger('text:typing:off')).catch(this.errorLogger)
+        })
+
+        this.leaveButton.addEventListener('click', () => {
+          this.conversation.leave().then(this.eventLogger('member:left')).catch(this.errorLogger)
+        })
+
+        this.enableButton.addEventListener('click', () => {
+
+          this.conversation.media.enable().then(stream => {
+            // Older browsers may not have srcObject
+            if ("srcObject" in this.audio) {
+              this.audio.srcObject = stream;
+            } else {
+              // Avoid using this in new browsers, as it is going away.
+              this.audio.src = window.URL.createObjectURL(stream);
+            }
+
+            this.audio.onloadedmetadata = () => {
+              this.audio.play();
+            }
+
+            this.eventLogger('member:media')()
+          }).catch(this.errorLogger)
+        })
+
+        this.disableButton.addEventListener('click', () => {
+          this.conversation.media.disable().then(this.eventLogger('member:media')).catch(this.errorLogger)
+        })
+      }
+    }
+
+    new ChatApp()
+  </script>
+</body>
+
+</html>
