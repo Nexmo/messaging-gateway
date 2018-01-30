@@ -30,6 +30,7 @@ $ nexmo app:create "My Conversation Application" http://example.com http://examp
 
 ## Running the demo
 
+1. Clone or download this repo
 1. Create a .env file using the env.example template
 1. Input your API Key, API Secret, and application ID
 1. Ensure the `private.key` file from the "Create an Application" is in your current working directory (See `private.key.example`)
