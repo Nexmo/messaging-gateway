@@ -34,6 +34,7 @@ $ nexmo app:create "My Conversation Application" http://example.com http://examp
 1. Create a .env file using the env.example template
 1. Input your API Key, API Secret, and application ID
 1. Ensure the `private.key` file from the "Create an Application" is in your current working directory (See `private.key.example`)
+1. Install the node modules `$ npm install`
 1. Start the app: `$ DEBUG=myapp:* npm start`
 1. The app should be running on `localhost:3000`
 
