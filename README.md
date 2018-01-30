@@ -25,7 +25,7 @@ $ nexmo setup api_key api_secret
 Create an application named `My Conversation Application` and store the returned private key as `private.key` within your current working directory.
 
 ```sh
-$ nexmo app:create "My first Conversation Application" --type=rtc --keyfile=private.key
+$ nexmo app:create "My Conversation Application" http://example.com htp://example.com --type=rtc --keyfile=private.key
 ```
 
 ## Running the demo
