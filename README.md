@@ -2,6 +2,13 @@
 
 An API server to demo how to use Nexmo In-App Messaging on your server-side applications. For more info visit our [developer preview site.](https://ea.developer.nexmo.com/conversation/overview)
 
+<!-- Remix Button -->
+ Remix a sample project we set up on Glitch:
+<a href="https://glitch.com/edit/#!/remix/nexmo-in-app-demo">
+
+  <img src="https://cdn.glitch.com/2bdfb3f8-05ef-4035-a06e-2043962a3a13%2Fremix%402x.png?1513093958726" alt="remix button" aria-label="remix" height="33">
+</a>
+
 ## Prerequisites
 
 ### Install the Nexmo CLI
